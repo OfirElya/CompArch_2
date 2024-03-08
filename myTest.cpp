@@ -22,7 +22,7 @@ int main() {
     }
     Cache l1(2,8,2,0,1,8);
     cout << l1.blocksArr[0][0]->state << endl;
-    unique_ptr<Block> p = unique_ptr<Block>(new Block(5));
+    shared_ptr<Block> p = shared_ptr<Block>(new Block(5));
 //    free(p);
     return 0;
 }

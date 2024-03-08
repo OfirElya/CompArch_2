@@ -50,7 +50,7 @@ public:
     bool writeAllocate;
     int tagSize;
     int cacheSize;
-    vector<vector<unique_ptr<Block>>> blocksArr;
+    vector<vector<shared_ptr<Block>>> blocksArr;
     vector<vector<int>> lruArr;
 
 

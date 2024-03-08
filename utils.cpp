@@ -30,11 +30,11 @@ Cache::Cache(int sets, int blockSize, int ways, int cycles, bool writeAllocate, 
 
     // Initialize blocksArray
     for(int i=0; i<ways; i++){
-        vector<unique_ptr<Block>> innerVec;
+        vector<shared_ptr<Block>> innerVec;
         for(int j=0; j<sets; j++){
-            innerVec.push_back(unique_ptr<Block>(new Block(blockSize)));
+            innerVec.push_back(shared_ptr<Block>(new Block(blockSize)));
         }
-        blocksArr.push_back(move(innerVec));
+        blocksArr.push_back(innerVec);
     }
 }
 
