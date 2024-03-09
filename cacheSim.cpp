@@ -61,6 +61,16 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	int num_blocks = pow(2, BSize);
+	int num_ways_L1 = pow(2, L1Assoc);
+	int num_ways_L2 = pow(2, L2Assoc);
+	int num_sets_L1 = num_blocks / num_ways_L1;
+	int num_sets_L2 = num_blocks / num_ways_L2;
+
+	//init caches
+	Cache L1(num_sets_L1, BSize, num_ways_L1, L1Cyc, WrAlloc, L1Size);
+	Cache L2(num_sets_L2, BSize, num_ways_L2, L2Cyc, WrAlloc, L2Size);
+
 	while (getline(file, line)) {
 
 		stringstream ss(line);
@@ -85,6 +95,9 @@ int main(int argc, char **argv) {
 
 		// DEBUG - remove this line
 		cout << " (dec) " << num << endl;
+
+		//execute
+		exeCmd(operation, num, &L1, &L2);
 
 	}
 

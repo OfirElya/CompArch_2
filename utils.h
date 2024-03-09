@@ -41,14 +41,13 @@ public:
     int ways;
     int cycles;
     bool writeAllocate;
-    bool L2;
     int tagSize;
     int cacheSize;
     vector<vector<shared_ptr<Block>>> blocksArr;
     vector<vector<int>> lruArr;
 
 
-    Cache(int sets, int blockSize, int ways, int cycles, bool writeAllocate, bool L2, int cacheSize);
+    Cache(int sets, int blockSize, int ways, int cycles, bool writeAllocate, int cacheSize);
     ~Cache() = default;
     Cache(const Cache& cache)= default;
     Cache &operator=(const Cache& cache)= default;
@@ -67,6 +66,9 @@ bool snoop (int tag, int set, Cache* L1);
 int buildPc(int tag, int set, int block_size, int sets_num);
 bool tryReplace(Cache* C, int tag, int set);
 void writeMiss(int pc, Cache* L1,  Cache* L2);
-
+void writeHitL1(int pc, Cache* L1);
+void writeHitL2(int pc, Cache* L2, Cache* L1);
+void exeCmd(char operation, unsigned long int pc, Cache* L1, Cache* L2);
+void writeBack(int L1_set, int lru_way, Cache* L1, Cache* L2);
 
 #endif //COMPARCH_HW2_UTILS_H
