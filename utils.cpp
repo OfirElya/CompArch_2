@@ -102,7 +102,7 @@ unsigned long int Cache::calcTag(const unsigned long int pc){
 }
 
 int Cache::calcSet(const unsigned long int pc){
-    return ((pc >> (this->blockSize) ) % this->height);
+    return ((pc >> (this->blockSize) ) % this->sets);
 }
 
 
@@ -154,7 +154,8 @@ void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
                 if(l2spot == -1) {
                     int lruWay = l2->getLRU(l2Set);
                     unsigned long int lruTag = l2->blocksArr[l2Set][lruWay]->tag;
-                    l2->toRemove(l2Set, lruWay);//TODO do i need to update lru?
+                    l2->toRemove(l2Set, lruWay);//TODO do i need to update lru? NO
+                    //NOA: FIRST SNOOP TO L1, THEN REMOVE FROM L2
 
                     //remove from l1 if exists
                     if( l1->cacheHit(lruTag)){
@@ -165,31 +166,32 @@ void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
                 }
                 l2->toInsert(pc);
                 ///////// TRY INSERT TO L2 END
-
-
-                ///////// TRY INSERT TO L1 START /////////
-                int l1spot = l1->findSpot(l1Set);
-                if( l1spot == -1) {
-                    int lruWay = l1->getLRU(l1Set);
-                    unsigned long int lruTag = l1->blocksArr[l1Set][lruWay]->tag;
-                    blockState lruState = l1->blocksArr[l1Set][lruWay]->state;
-                    l1->toRemove(l1Set, lruWay);
-                    // if dirty, write dirty in l2
-                    if( lruState == DIRTY){
-                        int lruL2Set = l2->calcSet(lruTag);
-                        int lru2Way = l2->getWay(lruL2Set, lruTag);
-                        l2->blocksArr[lruL2Set][lru2Way]->state = DIRTY;
-                    }
-                }
-                l1->toInsert(pc);
-                ///////// TRY INSERT TO L1 END
-
-
             }
+
+
+            ///////// TRY INSERT TO L1 START /////////
+            int l1spot = l1->findSpot(l1Set);
+            if( l1spot == -1) {
+                int lruWay = l1->getLRU(l1Set);
+                unsigned long int lruTag = l1->blocksArr[l1Set][lruWay]->tag;
+                blockState lruState = l1->blocksArr[l1Set][lruWay]->state;
+                l1->toRemove(l1Set, lruWay);
+                // if dirty, write dirty in l2
+                if( lruState == DIRTY){
+                    int lruL2Set = l2->calcSet(lruTag);
+                    int lru2Way = l2->getWay(lruL2Set, lruTag);
+                    l2->blocksArr[lruL2Set][lru2Way]->state = DIRTY;
+                }
+            }
+            l1->toInsert(pc);
+            ///////// TRY INSERT TO L1 END
         }
         // If the operation is write, i want to make the tag dirty
         else if(operation == 'w')
             l1->toDirty(pc);
+        // if hit on read, just update lru
+        else if(operation == 'r')
+            l1->updateLRU(l1Set, l1->getWay(l1Set, pc));
 
     }
     else if( operation == 'w' && !l1->writeAllocate){
@@ -207,13 +209,15 @@ void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
 void calcTime(Cache *l1, Cache* l2, double *l1missRate,
               double *l2missRate, double *avgTime,
               unsigned int l1Cycles, unsigned int l2Cycles,
-              unsigned int memCycles){
+              unsigned int memCycles)
+{
     *l1missRate = (double) l1->missCnt / (double) l1->accessCnt;
     *l2missRate = (double) l2->missCnt / (double) l2->accessCnt;
     *avgTime = (double) ((l1->accessCnt * l1Cycles) +
                          (l2->accessCnt * l2Cycles) + (l2->missCnt * memCycles)) /
                (double) l1->accessCnt;
 }
+
 unsigned long int buildPc(int tag, int set, int block_size, int sets_num){
     int sets_size = log2(sets_num);
     unsigned long int pc = (tag << (block_size + sets_size)) | (set << sets_size);

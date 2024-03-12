@@ -80,9 +80,10 @@ void writeHitL2(unsigned long int pc, Cache* L2, Cache* L1);
 void exeCmd(char operation, unsigned long int pc, Cache* L1, Cache* L2);
 void writeBack(int L1_set, int lru_way, Cache* L1, Cache* L2);
 
-#endif //COMPARCH_HW2_UTILS_H
 void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2);
 void calcTime(Cache *l1, Cache* l2, double *l1missRate,
               double *l2missRate, double *avgTime,
               unsigned int l1Cycles, unsigned int l2Cycles,
               unsigned int memCycles);
+
+#endif //COMPARCH_HW2_UTILS_H
