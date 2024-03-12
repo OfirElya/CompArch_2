@@ -209,6 +209,7 @@ void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
             l2->accessCnt++;
             if(!l2->cacheHit(pc))
                 l2->missCnt++;
+            else l2->toDirty(pc);
         }
     }
 }
