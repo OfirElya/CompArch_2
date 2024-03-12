@@ -121,6 +121,7 @@ int Cache::getLRU(const int set){
         if(this->lruArr[set][i] == 0)
             return i;
     }
+    return this->ways;
 }
 
 ///////////////// helper functions /////////////////
@@ -169,6 +170,10 @@ void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
                     l2->blocksArr[l2Set][insertWay]->state = DIRTY;
                 }
                 ///////// TRY INSERT TO L2 END
+            }
+            else if(operation == 'r'){
+                int l2Way = l2->getWay(l2Set, pc);
+                l2->updateLRU(l2Set, l2Way);
             }
 
 
