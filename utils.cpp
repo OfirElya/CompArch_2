@@ -14,6 +14,8 @@ Block::Block() : tag(-1), state(INVALID) {}
 
 Cache::Cache(int sets, int blockSize, int ways, int cycles, bool writeAllocate, int cacheSize) : sets(sets), blockSize(blockSize), ways(ways), cycles(cycles), writeAllocate(writeAllocate), cacheSize(cacheSize){
     // Initialize lruArray
+    height = (int) pow(2,(cacheSize - blockSize - log2(ways)));
+    sets = height;
     for(int i=0; i<sets; i++){
         vector<int> innerVec;
         for(int j=0; j<ways; j++){
@@ -32,7 +34,6 @@ Cache::Cache(int sets, int blockSize, int ways, int cycles, bool writeAllocate, 
     }
     accessCnt = 0;
     missCnt = 0;
-    height = (int) pow(2,(cacheSize - blockSize - log2(ways)));
 }
 
 blockState Cache::getState(int set, int way){
@@ -96,15 +97,13 @@ int Cache::findSpot(int set){
     return -1;
 }
 
-
 unsigned long int Cache::calcTag(const unsigned long int pc){
     return ( (pc >> (32 - this->tagSize)) );
 }
 
 int Cache::calcSet(const unsigned long int pc){
-    return ((pc >> (this->blockSize) ) % this->sets);
+    return ((pc >> (this->blockSize) ) % this->height);
 }
-
 
 void Cache::updateLRU(const int set, const int way) {
     int way_accessed = lruArr[set][way];
@@ -165,6 +164,10 @@ void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
                     }
                 }
                 l2->toInsert(pc);
+                if(operation == 'w'){
+                    int insertWay = l2->getWay(l2Set, pc);
+                    l2->blocksArr[l2Set][insertWay]->state = DIRTY;
+                }
                 ///////// TRY INSERT TO L2 END
             }
 
@@ -180,10 +183,14 @@ void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
                 if( lruState == DIRTY){
                     int lruL2Set = l2->calcSet(lruTag);
                     int lru2Way = l2->getWay(lruL2Set, lruTag);
-                    l2->blocksArr[lruL2Set][lru2Way]->state = DIRTY;
+                    l2->toDirty(lruTag);
                 }
             }
             l1->toInsert(pc);
+            if(operation == 'w'){
+                int insertWay = l1->getWay(l1Set, pc);
+                l1->blocksArr[l1Set][insertWay]->state = DIRTY;
+            }
             ///////// TRY INSERT TO L1 END
         }
         // If the operation is write, i want to make the tag dirty
