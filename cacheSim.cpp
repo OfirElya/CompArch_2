@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
 		cout << " (dec) " << num << endl;
 
 		//execute
-		exeCmd(operation, num, &L1, &L2);
+		exeCmdNew(operation, num, &L1, &L2);
 
 	}
 
@@ -105,7 +105,8 @@ int main(int argc, char **argv) {
 	double L2MissRate;
 	double avgAccTime;
 
-    //TODO:: EVERYTHING
+    calcTime(&L1, &L2, &L1MissRate, &L2MissRate,
+             &avgAccTime, L1Cyc, L2Cyc, MemCyc);
 
 	printf("L1miss=%.03f ", L1MissRate);
 	printf("L2miss=%.03f ", L2MissRate);

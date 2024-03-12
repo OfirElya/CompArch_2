@@ -5,6 +5,8 @@
 
 #include <cassert>
 
+
+void writeData(const int tag, const int set, const int way, Cache* cache);
 ///////////////// Block methods /////////////////
 Block::Block() : tag(-1), state(INVALID) {}
 
@@ -21,55 +23,92 @@ Cache::Cache(int sets, int blockSize, int ways, int cycles, bool writeAllocate, 
     }
 
     // Initialize blocksArray
-    for(int i=0; i<ways; i++){
+    for(int i=0; i<sets; i++){
         vector<shared_ptr<Block>> innerVec;
-        for(int j=0; j<sets; j++){
+        for(int j=0; j<ways; j++){
             innerVec.push_back(shared_ptr<Block>(new Block()));
         }
         blocksArr.push_back(innerVec);
     }
+    accessCnt = 0;
+    missCnt = 0;
+    height = (int) pow(2,(cacheSize - blockSize - log2(ways)));
 }
 
 blockState Cache::getState(int set, int way){
-    return this->blocksArr[set][way]->state;
+    return blocksArr[set][way]->state;
 }
 
 // check if tag exists in set
-int Cache::getWay(int set, int tag){
+int Cache::getWay(int set, unsigned long int pc){
     for (int i = 0; i < this->ways; i++){
-        if (this->blocksArr[set][i]->tag == tag)
-        return i;
+        if ((blocksArr[set][i]->tag >> blockSize) == (pc >> blockSize))
+            return i;
     }
     return this->ways;
 }
 
-void Cache::insertData(int tag, int set, int way){
-
-    if (this->blocksArr[set][way]->state != INVALID){
-        this->blocksArr[set][way]->state = DIRTY;
+bool Cache::cacheHit(const unsigned long int pc){
+    int set = calcSet(pc);
+    for (int i = 0; i < this->ways; i++){
+        if ((blocksArr[set][i]->tag >> blockSize) == (pc >> blockSize))
+            return true;
     }
-    else {
-        this->blocksArr[set][way]->state = VALID;
-    }
-    this->blocksArr[set][way]->tag = tag;
-    updateLRU(set, way);
-
-    return;
-    
+    return false;
 }
 
-int Cache::calcTag(const int pc){
+void Cache::toDirty(const unsigned long int pc){
+    int set = calcSet(pc);
+    int i;
+    for ( i = 0; i < this->ways; i++){
+        if ( (blocksArr[set][i]->tag >> blockSize) == (pc >> blockSize)){
+            blocksArr[set][i]->state = DIRTY;
+            break;
+        }
+    }
+    updateLRU(set, i);
+}
+
+void Cache::toInsert(const unsigned long int pc){
+    int set = calcSet(pc);
+    int i;
+    for ( i = 0; i < this->ways; i++){
+        if (this->blocksArr[set][i]->state == INVALID) {
+            blocksArr[set][i]->state = VALID;
+            blocksArr[set][i]->tag = pc;
+            break;
+        }
+    }
+    updateLRU(set, i);
+}
+
+void Cache::toRemove(const int set, const int way){
+    blocksArr[set][way]->tag = -1;
+    blocksArr[set][way]->state = INVALID;
+//    updateLRU(set, way);
+}
+
+int Cache::findSpot(int set){
+    for (int i = 0; i < this->ways; i++){
+        if (this->blocksArr[set][i]->state == INVALID)
+            return i;
+    }
+    return -1;
+}
+
+
+unsigned long int Cache::calcTag(const unsigned long int pc){
     return ( (pc >> (32 - this->tagSize)) );
 }
 
-int Cache::calcSet(const int pc){
-    return ((pc >> (this->blockSize) % this->sets));
+int Cache::calcSet(const unsigned long int pc){
+    return ((pc >> (this->blockSize) ) % this->height);
 }
 
 
 void Cache::updateLRU(const int set, const int way) {
     int way_accessed = lruArr[set][way];
-    lruArr[set][way] = this->ways;
+    lruArr[set][way] = this->ways - 1;
     for(int i =0;i<this->ways; i++){
         if(i == way)
             continue;
@@ -83,231 +122,103 @@ int Cache::getLRU(const int set){
         if(lruArr[set][i] == 0)
             return i;
     }
-    return 0;
 }
 
 ///////////////// helper functions /////////////////
 
-// L2 snoops L1 - return true if tag exists in L1 and isn't INVALID, update the location of found tag in L1
-//FIXME: update function
-bool snoop (int tag, Cache* L1, int* L1_set, int* L1_way){
-	for (int set = 0; set < L1->sets; set++)
-    {
-        for (int way = 0; way < L1->ways; way++)
-        {
-            if (L1->blocksArr[set][way]->tag == tag && L1->blocksArr[set][way]->state != INVALID)
-            {
-                *L1_set = set;
-                *L1_way = way;
-                return true;
-            }
-	    }
-    }
-	return false;
-}
 
-// if the specified set in Cache C has a free space, replace it with wanted tag.
-// return true if replaced, false if there was no space to insert data
-bool tryReplace(Cache* C, int tag, int set){
-    for (int i = 0; i < C->ways; i++){
-        if (C->getState(set, i) == INVALID){
-            C->insertData(tag, set, i);
-            return true;
+
+
+
+//////////////////////////////// OFIR CHANGES /////////////////////////////////
+
+
+
+void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
+    int l1Set = l1->calcSet(pc);
+    int l2Set = l2->calcSet(pc);
+    bool l1Hit = l1->cacheHit(pc);
+    l1->accessCnt++;
+    if(operation == 'r' || (operation == 'w' && l1->writeAllocate)){
+        if(!l1Hit){
+            // Missed L1 , Accessed L2
+            l1->missCnt++;
+            l2->accessCnt++;
+            bool l2Hit = l2->cacheHit(pc);
+
+            if(!l2Hit){
+                l2->missCnt++;
+
+                ///////// TRY INSERT TO L2 START /////////
+                int l2spot = l2->findSpot(l2Set);
+                if(l2spot == -1) {
+                    int lruWay = l2->getLRU(l2Set);
+                    unsigned long int lruTag = l2->blocksArr[l2Set][lruWay]->tag;
+                    l2->toRemove(l2Set, lruWay);//TODO do i need to update lru?
+
+                    //remove from l1 if exists
+                    if( l1->cacheHit(lruTag)){
+                        int lruL1Set = l1->calcSet(lruTag);
+                        int lru1Way = l1->getWay(lruL1Set, lruTag);
+                        l1->toRemove(lruL1Set, lru1Way);//TODO: do i need to update lru?
+                    }
+                }
+                l2->toInsert(pc);
+                ///////// TRY INSERT TO L2 END
+
+
+                ///////// TRY INSERT TO L1 START /////////
+                int l1spot = l1->findSpot(l1Set);
+                if( l1spot == -1) {
+                    int lruWay = l1->getLRU(l1Set);
+                    unsigned long int lruTag = l1->blocksArr[l1Set][lruWay]->tag;
+                    blockState lruState = l1->blocksArr[l1Set][lruWay]->state;
+                    l1->toRemove(l1Set, lruWay);
+                    // if dirty, write dirty in l2
+                    if( lruState == DIRTY){
+                        int lruL2Set = l2->calcSet(lruTag);
+                        int lru2Way = l2->getWay(lruL2Set, lruTag);
+                        l2->blocksArr[lruL2Set][lru2Way]->state = DIRTY;
+                    }
+                }
+                l1->toInsert(pc);
+                ///////// TRY INSERT TO L1 END
+
+
+            }
+        }
+        // If the operation is write, i want to make the tag dirty
+        else if(operation == 'w')
+            l1->toDirty(pc);
+
+    }
+    else if( operation == 'w' && !l1->writeAllocate){
+        if (l1Hit)
+            l1->toDirty(pc);
+        else{
+            l1->missCnt++;
+            l2->accessCnt++;
+            if(!l2->cacheHit(pc))
+                l2->missCnt++;
         }
     }
-    return false;
 }
 
-// rebuild pc from tag and set. assuming same block_size in all caches and ignoring block offset
-int buildPc(int tag, int set, int block_size, int sets_num){
+void calcTime(Cache *l1, Cache* l2, double *l1missRate,
+              double *l2missRate, double *avgTime,
+              unsigned int l1Cycles, unsigned int l2Cycles,
+              unsigned int memCycles){
+    *l1missRate = (double) l1->missCnt / (double) l1->accessCnt;
+    *l2missRate = (double) l2->missCnt / (double) l2->accessCnt;
+    *avgTime = (double) ((l1->accessCnt * l1Cycles) +
+                         (l2->accessCnt * l2Cycles) + (l2->missCnt * memCycles)) /
+               (double) l1->accessCnt;
+}
+unsigned long int buildPc(int tag, int set, int block_size, int sets_num){
     int sets_size = log2(sets_num);
-    int pc = (tag << (block_size + sets_size)) | (set << sets_size);
+    unsigned long int pc = (tag << (block_size + sets_size)) | (set << sets_size);
     return pc;
 }
 
-void writeMiss(int pc, Cache* L1,  Cache* L2){
-    if (!L1->writeAllocate) return;
 
-    int L1_tag = L1->calcTag(pc);
-    int L2_tag = L2->calcTag(pc);
-    int L1_set = L1->calcSet(pc);
-    int L2_set = L2->calcSet(pc);
-
-    bool L1_replaced = false;
-    bool L2_replaced = false;
-
-    L2_replaced = tryReplace(L2, L2_tag, L2_set);
-
-    if (L2_replaced){
-        L1_replaced = tryReplace(L1, L1_tag, L1_set);
-        if (L1_replaced) return;
-
-        // inserted data to L2 but no space in L1
-        int lru_way = L1->getLRU(L1_set);
-        blockState lru_state = L1->getState(L1_set, lru_way);
-       
-        // way is dirty - need to writeback to L2 before replacing
-        if (lru_state == DIRTY){
-            writeBack(L1_set, lru_way, L1, L2);
-        }
-        // invalidate replaced block in L1
-        L1->blocksArr[L1_set][lru_way]->state = INVALID;
-        // write new block to L1
-        L1->insertData(L1_tag, L1_set, lru_way);
-        return;
-    }
-    else {
-        int lru_way = L2->getLRU(L2_set);
-        //snoop
-        int L2_tag_snooped = L2->blocksArr[L2_set][lru_way]->tag;
-        int L1_pc_snooped = buildPc(L2_tag_snooped, L2_set, L2->blockSize, L2->sets);
-        int L1_set_snooped = L1->calcSet(L1_pc_snooped);
-        int L1_tag_snooped = L1->calcTag(L1_pc_snooped);
-        int L1_way_snooped = L1->getWay(L1_set_snooped, L1_tag_snooped);
-       
-       // tag isn't in L1 - we can remove it from L2 safely
-        if (L1_way_snooped == L1->ways){
-            // invalidate replaced block in L2
-            L2->blocksArr[L2_set][lru_way]->state = INVALID;
-            // write new block to L2
-            L2->insertData(L2_tag, L2_set, lru_way);
-        }
-
-        // tag exists in L1 - need to update it in L2 and invalidate in L1 before removing from L2
-        else {
-            blockState snooped_state = L1->getState(L1_set_snooped, L1_way_snooped);
-            if (snooped_state == DIRTY){
-                writeBack(L1_set_snooped, L1_way_snooped, L1, L2);
-            }
-            // invalidate replaced block in L1
-            L1->blocksArr[L1_set_snooped][L1_way_snooped]->state = INVALID;
-            // write new block to L2
-            L2->insertData(L2_tag, L2_set, lru_way);
-        } 
-        // done with snoop - wrote new data to L2
-
-        // try to write new block to L1
-        L1_replaced = tryReplace(L1, L1_tag, L1_set);
-        if (L1_replaced) return;
-
-        // inserted data to L2 but no space in L1
-        int lru_way = L1->getLRU(L1_set);
-        blockState lru_state = L1->getState(L1_set, lru_way);
-       
-        // way is dirty - need to writeback to L2 before replacing
-        if (lru_state == DIRTY){
-            writeBack(L1_set, lru_way, L1, L2);
-        }
-        // invalidate replaced block in L1
-        L1->blocksArr[L1_set][lru_way]->state = INVALID;
-        // write new block to L1
-        L1->insertData(L1_tag, L1_set, lru_way);
-        return;
-    }
-}
-
-void writeHitL1(int pc, Cache* L1){
-    int tag = L1->calcTag(pc);
-    int set = L1->calcSet(pc);
-    int way = L1->getWay(set, tag);
-
-    L1->blocksArr[set][way]->state = DIRTY;
-    L1->updateLRU(set, way);
-    return;
-}
-
-void writeHitL2(int pc, Cache* L2, Cache* L1){
-    int L1_tag = L1->calcTag(pc);
-    int L2_tag = L2->calcTag(pc);
-    int L1_set = L1->calcSet(pc);
-    int L2_set = L2->calcSet(pc);
-    int L2_way = L2->getWay(L2_set, L2_tag);
-
-    //update in L2
-    L2->blocksArr[L2_set][L2_way]->state = DIRTY;
-    L2->updateLRU(L2_set, L2_way);
-
-    if (!L2->writeAllocate) return;
-    else {
-        // try replacing in L1
-        bool L1_replaced = tryReplace(L1, L1_tag, L1_set);
-        if (L1_replaced) return;
-        else { 
-            // inserted data to L2 but no space in L1
-            int lru_way = L1->getLRU(L1_set);
-            blockState lru_state = L1->getState(L1_set, lru_way);
-        
-            // way is dirty - need to writeback to L2 before replacing
-            if (lru_state == DIRTY){
-                writeBack(L1_set, lru_way, L1, L2);
-            }
-            // invalidate replaced block in L1
-            L1->blocksArr[L1_set][lru_way]->state = INVALID;
-            // write new block to L1
-            L1->insertData(L1_tag, L1_set, lru_way);
-            return;
-        }
-    }
-}
-
-void writeBack(int L1_set, int lru_way, Cache* L1, Cache* L2){
-    int L1_tag_replaced = L1->blocksArr[L1_set][lru_way]->tag;
-    int L2_pc_dirty = buildPc(L1_tag_replaced, L1_set, L1->blockSize, L1->sets);
-    int L2_set_dirty = L2->calcSet(L2_pc_dirty);
-    int L2_tag_dirty = L2->calcTag(L2_pc_dirty);
-    int L2_way_dirty = L2->getWay(L2_set_dirty, L2_tag_dirty);
-    L2->insertData(L2_tag_dirty, L2_set_dirty, L2_way_dirty);
-}
-
-void readMiss(){
-    // try insert to L2 and L1
-    return;
-}
-
-void readHitL2(){
-    // update LRU in L2
-    // try insert to L1
-    return;
-}
-
-void exeCmd(char operation, unsigned long int pc, Cache* L1, Cache* L2){
-    int L1_tag = L1->calcTag(pc);
-    int L2_tag = L2->calcTag(pc);
-    int L1_set = L1->calcSet(pc);
-    int L2_set = L2->calcSet(pc);
-    int L1_way = L1->getWay(L1_set, L1_tag);
-    int L2_way = L2->getWay(L2_set, L2_tag);
-
-    if (operation == 'R'){
-        if (L1_way < L1->ways && L1->getState(L1_set, L1_way) != INVALID){
-            //read hit
-            L1->updateLRU(L1_set, L1_way);
-            return;
-        }
-        else if (L2_way < L2->ways && L2->getState(L2_set, L2_way) != INVALID){
-            //read hit L2
-
-        }
-        else {
-            //read miss
-        }
-    }
-    if (operation == 'W'){
-        if (L1_way < L1->ways && L1->getState(L1_set, L1_way) != INVALID){
-            // write hit L1
-            writeHitL1(pc, L1);
-            return;
-        }
-        else if (L2_way < L2->ways && L2->getState(L2_set, L2_way) != INVALID){
-            // write hit L2
-            writeHitL2(pc, L2, L1);
-            return;
-        }
-        else {
-            // write miss
-            writeMiss(pc, L1, L2);
-            return;
-        }
-    }
-}
-
+// I WANT LRU TO RETURN ME THE pc of the
