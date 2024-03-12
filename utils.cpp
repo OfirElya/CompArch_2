@@ -67,25 +67,25 @@ void Cache::toDirty(const unsigned long int pc){
             break;
         }
     }
-    updateLRU(set, i);
+    this->updateLRU(set, i);
 }
 
 void Cache::toInsert(const unsigned long int pc){
-    int set = calcSet(pc);
+    int set = this->calcSet(pc);
     int i;
     for ( i = 0; i < this->ways; i++){
         if (this->blocksArr[set][i]->state == INVALID) {
-            blocksArr[set][i]->state = VALID;
-            blocksArr[set][i]->tag = pc;
+            this->blocksArr[set][i]->state = VALID;
+            this->blocksArr[set][i]->tag = pc;
             break;
         }
     }
-    updateLRU(set, i);
+    this->updateLRU(set, i);
 }
 
 void Cache::toRemove(const int set, const int way){
-    blocksArr[set][way]->tag = -1;
-    blocksArr[set][way]->state = INVALID;
+    this->blocksArr[set][way]->tag = -1;
+    this->blocksArr[set][way]->state = INVALID;
 //    updateLRU(set, way);
 }
 
@@ -106,19 +106,19 @@ int Cache::calcSet(const unsigned long int pc){
 }
 
 void Cache::updateLRU(const int set, const int way) {
-    int way_accessed = lruArr[set][way];
-    lruArr[set][way] = this->ways - 1;
+    int way_accessed = this->lruArr[set][way];
+    this->lruArr[set][way] = this->ways - 1;
     for(int i =0;i<this->ways; i++){
         if(i == way)
             continue;
-        if(lruArr[set][i] > way_accessed)
-            lruArr[set][i]--;
+        if(this->lruArr[set][i] > way_accessed)
+            this->lruArr[set][i]--;
     }
 }
 
 int Cache::getLRU(const int set){
     for(int i =0;i<this->ways;i++){
-        if(lruArr[set][i] == 0)
+        if(this->lruArr[set][i] == 0)
             return i;
     }
 }
