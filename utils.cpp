@@ -5,7 +5,6 @@
 
 #include <cassert>
 
-
 void writeData(const int tag, const int set, const int way, Cache* cache);
 ///////////////// Block methods /////////////////
 Block::Block() : tag(-1), state(INVALID) {}
@@ -52,7 +51,7 @@ int Cache::getWay(int set, unsigned long int pc){
 bool Cache::cacheHit(const unsigned long int pc){
     int set = calcSet(pc);
     for (int i = 0; i < this->ways; i++){
-        if ((blocksArr[set][i]->tag >> blockSize) == (pc >> blockSize))
+        if ((this->blocksArr[set][i]->tag >> blockSize) == (pc >> blockSize) && this->blocksArr[set][i]->state != INVALID)
             return true;
     }
     return false;
@@ -81,12 +80,12 @@ void Cache::toInsert(const unsigned long int pc){
         }
     }
     this->updateLRU(set, i);
+    return;
 }
 
 void Cache::toRemove(const int set, const int way){
     this->blocksArr[set][way]->tag = -1;
     this->blocksArr[set][way]->state = INVALID;
-//    updateLRU(set, way);
 }
 
 int Cache::findSpot(int set){
@@ -108,12 +107,13 @@ int Cache::calcSet(const unsigned long int pc){
 void Cache::updateLRU(const int set, const int way) {
     int way_accessed = this->lruArr[set][way];
     this->lruArr[set][way] = this->ways - 1;
-    for(int i =0;i<this->ways; i++){
+    for(int i =0; i<this->ways; i++){
         if(i == way)
             continue;
         if(this->lruArr[set][i] > way_accessed)
             this->lruArr[set][i]--;
     }
+    return;
 }
 
 int Cache::getLRU(const int set){
