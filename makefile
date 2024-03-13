@@ -3,7 +3,7 @@
 #	g++ -o cacheSim cacheSim.cpp
 
 myTest: myTest.cpp utils.cpp utils.h
-	g++ -o cacheSim cacheSim.cpp utils.cpp
+	g++ -Wall -std=c++11 -o cacheSim cacheSim.cpp utils.cpp
 
 .PHONY: clean
 clean:

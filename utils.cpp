@@ -171,7 +171,7 @@ void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
                 }
                 ///////// TRY INSERT TO L2 END
             }
-            else if(operation == 'r'){
+            else {
                 int l2Way = l2->getWay(l2Set, pc);
                 l2->updateLRU(l2Set, l2Way);
             }
@@ -186,8 +186,6 @@ void exeCmdNew(char operation, unsigned long int pc, Cache* l1, Cache* l2) {
                 l1->toRemove(l1Set, lruWay);
                 // if dirty, write dirty in l2
                 if( lruState == DIRTY){
-                    int lruL2Set = l2->calcSet(lruTag);
-                    int lru2Way = l2->getWay(lruL2Set, lruTag);
                     l2->toDirty(lruTag);
                 }
             }

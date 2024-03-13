@@ -1,15 +1,13 @@
 //
 // Created by ofir1 on 05-Mar-24.
 //
+#ifndef COMPARCH_HW2_UTILS_H
+#define COMPARCH_HW2_UTILS_H
 
 #include <vector>
 #include <stdlib.h>
 #include <memory>
 #include <math.h>
-
-
-#ifndef COMPARCH_HW2_UTILS_H
-#define COMPARCH_HW2_UTILS_H
 
 using namespace std;
 
